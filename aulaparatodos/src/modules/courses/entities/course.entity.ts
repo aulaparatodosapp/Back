@@ -7,6 +7,7 @@ import {
 } from 'typeorm';
 
 import { CourseModality } from '../../../common/course-modality.enum';
+import { CourseLevel } from '../../../common/course-level.enum';
 import { Category } from '../../categories/entities/category.entity';
 
 @Entity('courses')
@@ -20,6 +21,32 @@ export class Course {
   @Column({ type: 'text' })
   descripcion!: string;
 
+  @Column({ type: 'text', nullable: true })
+  descripcionDetallada!: string | null;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  imagenUrl!: string | null;
+
+  @Column({
+    type: 'enum',
+    enum: CourseLevel,
+  })
+  nivel!: CourseLevel;
+
+  @Column({
+    type: 'text',
+    array: true,
+    default: '{}',
+  })
+  objetivos!: string[];
+
+  @Column({
+    type: 'text',
+    array: true,
+    default: '{}',
+  })
+  requisitos!: string[];
+
   @Column({ type: 'int' })
   duracionHoras!: number;
 
@@ -29,7 +56,7 @@ export class Course {
   })
   modalidad!: CourseModality;
 
-  @Column({ type: 'boolean', default: true })
+  @Column({ type: 'boolean', default: false })
   activo!: boolean;
 
   @Column({ type: 'int', default: 0 })

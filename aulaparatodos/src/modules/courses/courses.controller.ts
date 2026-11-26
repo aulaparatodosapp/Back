@@ -3,7 +3,6 @@ import {
   Get,
   Post,
   Patch,
-  Delete,
   Body,
   Param,
   Query,
@@ -27,6 +26,8 @@ import {
   CreateCourseDto,
   UpdateCourseDto,
   FilterCoursesDto,
+  FilterAdminCoursesDto,
+  UpdateCourseStatusDto,
 } from './dto/courses.dto';
 
 @ApiTags('Courses')
@@ -36,11 +37,12 @@ export class CoursesController {
     private readonly coursesService: CoursesService,
   ) {}
 
+  // Listado público
   @Get()
   @ApiOperation({
     summary: 'Listar cursos activos',
     description:
-      'Permite obtener cursos activos con paginación y filtros opcionales por categoría y modalidad.',
+      'Permite obtener cursos activos con paginación, filtros por categoría, modalidad y nivel, y búsqueda por título o descripción.',
   })
   @ApiOkResponse({
     description: 'Listado de cursos obtenido correctamente',
@@ -53,11 +55,12 @@ export class CoursesController {
     return this.coursesService.findAll(filters);
   }
 
+  // Detalle público
   @Get(':id')
   @ApiOperation({
-    summary: 'Obtener un curso por ID',
+    summary: 'Obtener un curso activo por ID',
     description:
-      'Devuelve el detalle de un curso activo junto con su categoría.',
+      'Devuelve el detalle de un curso activo junto con su categoría, nivel, imagen, descripción detallada, objetivos y requisitos.',
   })
   @ApiParam({
     name: 'id',
@@ -83,11 +86,12 @@ export class CoursesController {
     return this.coursesService.findOne(id);
   }
 
+  // ADMIN: Crear curso
   @Post()
   @ApiOperation({
     summary: 'Crear un curso',
     description:
-      'Crea un curso asociado a una categoría existente.',
+      'Permite al administrador crear un curso inactivo asociado a una categoría existente y asignarle un nivel básico, intermedio o avanzado.',
   })
   @ApiBody({ type: CreateCourseDto })
   @ApiCreatedResponse({
@@ -108,11 +112,12 @@ export class CoursesController {
     return this.coursesService.create(createCourseDto);
   }
 
+  // ADMIN: Editar curso
   @Patch(':id')
   @ApiOperation({
     summary: 'Actualizar un curso',
     description:
-      'Permite modificar parcialmente los datos de un curso activo.',
+      'Permite al administrador modificar parcialmente los datos de un curso activo o inactivo, incluyendo su nivel.',
   })
   @ApiParam({
     name: 'id',
@@ -140,25 +145,86 @@ export class CoursesController {
     return this.coursesService.update(id, updateCourseDto);
   }
 
-  @Delete(':id')
+  // ADMIN: Activar o desactivar curso
+  @Patch(':id/status')
   @ApiOperation({
-    summary: 'Desactivar un curso',
+    summary: 'Activar o desactivar un curso',
     description:
-      'Realiza un borrado lógico estableciendo activo=false. El curso permanece almacenado en la base de datos.',
+      'Permite al administrador modificar el estado de un curso sin eliminarlo de la base de datos.',
   })
   @ApiParam({
     name: 'id',
-    description: 'UUID del curso a desactivar',
+    description: 'UUID del curso',
+    type: String,
+    format: 'uuid',
+  })
+  @ApiBody({ type: UpdateCourseStatusDto })
+  @ApiOkResponse({
+    description: 'Estado del curso actualizado correctamente',
+    type: Course,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Estado inválido o UUID incorrecto',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Curso no encontrado',
+  })
+  async updateStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateCourseStatusDto: UpdateCourseStatusDto,
+  ): Promise<Course> {
+    return this.coursesService.updateStatus(
+      id,
+      updateCourseStatusDto,
+    );
+  }
+}
+
+@ApiTags('Admin - Courses')
+@Controller('admin/courses')
+export class AdminCoursesController {
+  constructor(
+    private readonly coursesService: CoursesService,
+  ) {}
+
+  // ADMIN: Listar todos los cursos
+  @Get()
+  @ApiOperation({
+    summary: 'Listar todos los cursos',
+    description:
+      'Permite al administrador consultar cursos activos e inactivos, con paginación, búsqueda y filtros por categoría, modalidad, nivel y estado.',
+  })
+  @ApiOkResponse({
+    description: 'Listado de cursos obtenido correctamente',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Parámetros de consulta inválidos',
+  })
+  async findAllAdmin(
+    @Query() filters: FilterAdminCoursesDto,
+  ) {
+    return this.coursesService.findAllAdmin(filters);
+  }
+
+  // ADMIN: Consultar cualquier curso por ID
+  @Get(':id')
+  @ApiOperation({
+    summary: 'Obtener cualquier curso por ID',
+    description:
+      'Permite al administrador consultar el detalle de un curso independientemente de su estado.',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID del curso',
     type: String,
     format: 'uuid',
   })
   @ApiOkResponse({
-    description: 'Curso desactivado correctamente',
-    schema: {
-      example: {
-        id: '550e8400-e29b-41d4-a716-446655440000',
-      },
-    },
+    description: 'Curso encontrado correctamente',
+    type: Course,
   })
   @ApiResponse({
     status: 400,
@@ -166,14 +232,15 @@ export class CoursesController {
   })
   @ApiResponse({
     status: 404,
-    description: 'Curso no encontrado o ya desactivado',
+    description: 'Curso no encontrado',
   })
-  async remove(
+  async findOneAdmin(
     @Param('id', ParseUUIDPipe) id: string,
-  ): Promise<{ id: string }> {
-    return this.coursesService.remove(id);
+  ): Promise<Course> {
+    return this.coursesService.findOneAdmin(id);
   }
 }
+
 
 
 

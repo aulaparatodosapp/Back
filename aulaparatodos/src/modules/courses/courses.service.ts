@@ -1,7 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 
 import { Course } from './entities/course.entity';
-import { CreateCourseDto, UpdateCourseDto, FilterCoursesDto } from './dto/courses.dto';
+
+import {
+  CreateCourseDto,
+  UpdateCourseDto,
+  FilterCoursesDto,
+  FilterAdminCoursesDto,
+  UpdateCourseStatusDto,
+} from './dto/courses.dto';
+
 import { CoursesRepository } from './courses.repository';
 import { CategoriesService } from '../categories/categories.service';
 
@@ -12,26 +20,70 @@ export class CoursesService {
     private readonly categoriesService: CategoriesService,
   ) {}
 
-  
+  // Listado público de cursos activos
   async findAll(filters: FilterCoursesDto) {
-  const { page, limit, categoryId, modalidad } = filters;
+    const {
+      page,
+      limit,
+      categoryId,
+      modalidad,
+      nivel,
+      search,
+    } = filters;
 
-  const [courses, total] = await this.coursesRepository.findAll(
-    page,
-    limit,
-    categoryId,
-    modalidad,
-  );
+    const [courses, total] =
+      await this.coursesRepository.findAll(
+        page,
+        limit,
+        categoryId,
+        modalidad,
+        nivel,
+        search,
+        true,
+      );
 
-  return {
-    data: courses,
-    total,
-    page,
-    limit,
-    totalPages: Math.ceil(total / limit),
-  };
+    return {
+      data: courses,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
+  // Listado administrativo de cursos
+  async findAllAdmin(filters: FilterAdminCoursesDto) {
+    const {
+      page,
+      limit,
+      categoryId,
+      modalidad,
+      nivel,
+      search,
+      activo,
+    } = filters;
+
+    const [courses, total] =
+      await this.coursesRepository.findAll(
+        page,
+        limit,
+        categoryId,
+        modalidad,
+        nivel,
+        search,
+        activo,
+      );
+
+    return {
+      data: courses,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  // Buscar un curso activo
   async findOne(id: string): Promise<Course> {
     const course = await this.coursesRepository.findOne(id);
 
@@ -42,56 +94,73 @@ export class CoursesService {
     return course;
   }
 
+  // Buscar un curso independientemente de su estado
+  async findOneAdmin(id: string): Promise<Course> {
+    const course =
+      await this.coursesRepository.findOneAdmin(id);
+
+    if (!course) {
+      throw new NotFoundException('Curso no encontrado');
+    }
+
+    return course;
+  }
+
+  // Crear un curso inactivo
   async create(createCourseDto: CreateCourseDto): Promise<Course> {
     const { categoryId, ...courseData } = createCourseDto;
 
-    const category = await this.categoriesService.findOne(categoryId);
+    const category =
+      await this.categoriesService.findOne(categoryId);
 
     return this.coursesRepository.create({
       ...courseData,
       category,
+      activo: false,
     });
   }
 
-  
+  // Editar un curso activo o inactivo
   async update(
-  id: string,
-  updateCourseDto: UpdateCourseDto,
+    id: string,
+    updateCourseDto: UpdateCourseDto,
   ): Promise<Course> {
-  // Verificamos que el curso exista y esté activo
-  const course = await this.findOne(id);
+    const course = await this.findOneAdmin(id);
 
-  // Separamos la categoría del resto de los datos
-  const { categoryId, ...courseData } = updateCourseDto;
+    const { categoryId, ...courseData } = updateCourseDto;
 
-  // Actualizamos los atributos recibidos
-  Object.assign(course, courseData);
+    Object.assign(course, courseData);
 
-  // Si se envió una nueva categoría, verificamos su existencia
-  if (categoryId !== undefined) {
-    const category = await this.categoriesService.findOne(categoryId);
+    if (categoryId !== undefined) {
+      const category =
+        await this.categoriesService.findOne(categoryId);
 
-    course.category = category;
+      course.category = category;
+    }
+
+    return this.coursesRepository.update(course);
   }
 
-  // Guardamos los cambios
-  return await this.coursesRepository.update(course);
+  // Activar o desactivar un curso
+  async updateStatus(
+    id: string,
+    updateCourseStatusDto: UpdateCourseStatusDto,
+  ): Promise<Course> {
+    const course = await this.findOneAdmin(id);
+
+    course.activo = updateCourseStatusDto.activo;
+
+    return this.coursesRepository.update(course);
   }
 
-
+  // Desactivación lógica del curso
   async remove(id: string): Promise<{ id: string }> {
-    // Verificamos que el curso exista y esté activo
-    const course = await this.findOne(id);
-
-    // Realizamos el borrado lógico
-    course.activo = false;
-
-    // Guardamos el cambio en PostgreSQL
-    await this.coursesRepository.update(course);
+    const course = await this.updateStatus(id, {
+      activo: false,
+    });
 
     return { id: course.id };
   }
-
-
 }
+
 

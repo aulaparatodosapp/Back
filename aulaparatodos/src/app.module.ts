@@ -7,6 +7,7 @@ import { AppService } from './app.service';
 
 import { CoursesModule } from './modules/courses/courses.module';
 import { CategoriesModule } from './modules/categories/categories.module';
+import { SeedersModule } from './seeders/seeders.module';
 import { typeOrmConfig } from './config/typeorm.config';
 
 @Module({
@@ -23,6 +24,7 @@ import { typeOrmConfig } from './config/typeorm.config';
 
     CoursesModule,
     CategoriesModule,
+    SeedersModule
   ],
   controllers: [AppController],
   providers: [AppService],
