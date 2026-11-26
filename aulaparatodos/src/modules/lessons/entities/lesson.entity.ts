@@ -5,11 +5,13 @@ import {
   Column,
   ManyToOne,
   JoinColumn,
+  Unique,
 } from 'typeorm';
 
 import { CourseModule } from '../../modules/entities/course-module.entity';
 
 @Entity('lessons')
+@Unique('UQ_lessons_modulo_orden', ['moduloId', 'orden'])
 export class Lesson {
   @PrimaryGeneratedColumn('uuid')
   id!: string;

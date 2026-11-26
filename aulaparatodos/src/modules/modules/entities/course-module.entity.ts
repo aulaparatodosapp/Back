@@ -4,13 +4,15 @@ import {
   Column,
   ManyToOne,
   JoinColumn,
-  OneToMany
+  OneToMany,
+  Unique
 } from 'typeorm';
 
 import { Course } from '../../courses/entities/course.entity';
 import { Lesson } from '../../lessons/entities/lesson.entity';
 
 @Entity('course_modules')
+@Unique('UQ_course_modules_curso_orden', ['cursoId', 'orden'])
 export class CourseModule {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
