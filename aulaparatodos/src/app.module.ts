@@ -7,9 +7,11 @@ import { AppService } from './app.service';
 
 import { CoursesModule } from './modules/courses/courses.module';
 import { CategoriesModule } from './modules/categories/categories.module';
-import { typeOrmConfig } from './config/typeorm.config';
+import { SeedersModule } from './seeders/seeders.module';
 import { ModulesModule } from './modules/modules/modules.module';
 import { LessonsModule } from './modules/lessons/lessons.module';
+
+import { typeOrmConfig } from './config/typeorm.config';
 
 @Module({
   imports: [
@@ -27,6 +29,7 @@ import { LessonsModule } from './modules/lessons/lessons.module';
     CategoriesModule,
     ModulesModule,
     LessonsModule,
+    SeedersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

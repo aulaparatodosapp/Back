@@ -1,4 +1,9 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import {
+  ApiProperty,
+  ApiPropertyOptional,
+  PartialType,
+} from '@nestjs/swagger';
+
 import {
   IsString,
   IsNotEmpty,
@@ -8,16 +13,20 @@ import {
   IsEnum,
   IsUUID,
   IsOptional,
+  Max,
+  IsArray,
+  IsUrl,
+  ValidateIf,
   IsBoolean,
-  Max
 } from 'class-validator';
 
 import { CourseModality } from '../../../common/course-modality.enum';
-import { Type } from 'class-transformer';
+import { CourseLevel } from '../../../common/course-level.enum';
+import { Type, Transform } from 'class-transformer';
 
 export class CreateCourseDto {
   @ApiProperty({
-    example: 'Introducción a JavaScript',
+    example: 'Informática general',
     maxLength: 150,
   })
   @IsString()
@@ -26,15 +35,78 @@ export class CreateCourseDto {
   titulo!: string;
 
   @ApiProperty({
-    example: 'Curso introductorio de JavaScript',
+    example: 'Aprende los fundamentos de la informática',
   })
   @IsString()
   @IsNotEmpty()
   descripcion!: string;
 
+  @ApiPropertyOptional({
+    description: 'Descripción ampliada del curso',
+    example: 'Este curso está diseñado para desarrollar habilidades informáticas básicas.',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  descripcionDetallada?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'URL de la imagen de portada',
+    example: 'https://example.com/informatica.jpg',
+    maxLength: 500,
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  @IsUrl()
+  @MaxLength(500)
+  imagenUrl?: string | null;
+
   @ApiProperty({
-  description: 'Duración del curso expresada en horas',
-  example: 40,
+    description: 'Nivel de dificultad del curso',
+    enum: CourseLevel,
+    example: CourseLevel.BASICO,
+  })
+  @IsEnum(CourseLevel, {
+    message: 'El nivel debe ser basico, intermedio o avanzado',
+  })
+  nivel!: CourseLevel;
+
+  @ApiPropertyOptional({
+    description: 'Objetivos de aprendizaje del curso',
+    type: [String],
+    example: [
+      'Comprender el funcionamiento de una computadora',
+      'Identificar los componentes informáticos',
+      'Utilizar herramientas digitales básicas',
+    ],
+    default: [],
+  })
+  @ValidateIf((_, value) => value !== undefined)
+  @IsArray()
+  @IsString({ each: true })
+  @IsNotEmpty({ each: true })
+  objetivos?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Requisitos para realizar el curso',
+    type: [String],
+    example: [
+      'No necesitas conocimientos previos',
+      'Tener interés en aprender informática',
+    ],
+    default: [],
+  })
+  @ValidateIf((_, value) => value !== undefined)
+  @IsArray()
+  @IsString({ each: true })
+  @IsNotEmpty({ each: true })
+  requisitos?: string[];
+
+  @ApiProperty({
+    description: 'Duración del curso expresada en horas',
+    example: 40,
   })
   @IsInt({ message: 'La duración debe ser un número entero' })
   @Min(1, { message: 'La duración debe ser mayor a cero' })
@@ -47,7 +119,6 @@ export class CreateCourseDto {
   @IsEnum(CourseModality)
   modalidad!: CourseModality;
 
-  
   @ApiProperty({
     description: 'Cantidad de cupos disponibles (máximo 5)',
     example: 5,
@@ -59,7 +130,6 @@ export class CreateCourseDto {
   @Max(5, { message: 'El máximo permitido es de 5 cupos' })
   cuposDisponibles!: number;
 
-
   @ApiProperty({
     example: '550e8400-e29b-41d4-a716-446655440000',
   })
@@ -68,7 +138,10 @@ export class CreateCourseDto {
   categoryId!: string;
 }
 
-export class UpdateCourseDto extends PartialType(CreateCourseDto) {}
+export class UpdateCourseDto extends PartialType(
+  CreateCourseDto,
+  { skipNullProperties: false },
+) {}
 
 export class FilterCoursesDto {
   @ApiPropertyOptional({
@@ -108,4 +181,54 @@ export class FilterCoursesDto {
   @IsOptional()
   @IsEnum(CourseModality)
   modalidad?: CourseModality;
+
+  @ApiPropertyOptional({
+    description: 'Nivel de dificultad del curso',
+    enum: CourseLevel,
+    example: CourseLevel.BASICO,
+  })
+  @IsOptional()
+  @IsEnum(CourseLevel)
+  nivel?: CourseLevel;
+
+  @ApiPropertyOptional({
+    description: 'Buscar cursos por título o descripción',
+    example: 'informática',
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(150)
+  search?: string;
+}
+
+// DTO exclusivo para activar o desactivar cursos
+export class UpdateCourseStatusDto {
+  @ApiProperty({
+    description: 'Estado del curso',
+    example: true,
+  })
+  @IsBoolean({
+    message: 'El estado del curso debe ser un booleano',
+  })
+  activo!: boolean;
+}
+
+// Filtros exclusivos del administrador
+export class FilterAdminCoursesDto extends FilterCoursesDto {
+  @ApiPropertyOptional({
+    description: 'Filtrar cursos por estado activo o inactivo',
+    type: Boolean,
+    example: true,
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return value;
+  })
+  @IsBoolean({
+    message: 'El estado debe ser true o false',
+  })
+  activo?: boolean;
 }

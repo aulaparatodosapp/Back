@@ -1,9 +1,13 @@
-
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { Course } from './entities/course.entity';
-import { CoursesController } from './courses.controller';
+
+import {
+  CoursesController,
+  AdminCoursesController,
+} from './courses.controller';
+
 import { CoursesService } from './courses.service';
 import { CoursesRepository } from './courses.repository';
 import { CategoriesModule } from '../categories/categories.module';
@@ -13,7 +17,10 @@ import { CategoriesModule } from '../categories/categories.module';
     TypeOrmModule.forFeature([Course]),
     CategoriesModule,
   ],
-  controllers: [CoursesController],
+  controllers: [
+    CoursesController,
+    AdminCoursesController,
+  ],
   providers: [
     CoursesService,
     CoursesRepository,
