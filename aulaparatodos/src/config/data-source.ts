@@ -8,6 +8,7 @@ import { Category } from '../modules/categories/entities/category.entity';
 import { Course } from '../modules/courses/entities/course.entity';
 import { CourseModule } from '../modules/modules/entities/course-module.entity';
 import { Lesson } from '../modules/lessons/entities/lesson.entity';
+import { User } from '../users/user.entity';
 
 config();
 
@@ -21,6 +22,7 @@ export default new DataSource({
     Course,
     CourseModule,
     Lesson,
+    User,
   ],
 
   migrations: [__dirname + '/../migrations/*{.ts,.js}'],
