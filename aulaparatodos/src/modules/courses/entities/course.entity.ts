@@ -4,11 +4,13 @@ import {
   PrimaryGeneratedColumn,
   ManyToOne,
   JoinColumn,
+  OneToMany,
 } from 'typeorm';
 
 import { CourseModality } from '../../../common/course-modality.enum';
 import { CourseLevel } from '../../../common/course-level.enum';
 import { Category } from '../../categories/entities/category.entity';
+import { CourseModule } from '../../modules/entities/course-module.entity';
 
 @Entity('courses')
 export class Course {
@@ -67,4 +69,10 @@ export class Course {
   })
   @JoinColumn({ name: 'categoryId' })
   category!: Category;
+
+  @OneToMany(
+    () => CourseModule,
+    (courseModule) => courseModule.curso,
+  )
+  modulos!: CourseModule[];
 }
