@@ -21,6 +21,7 @@ import { parseEnv } from 'node:util';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
+import * as bcrypt from 'bcrypt';
 import { AppModule } from '../src/app.module';
 import { Session } from '../src/auth/session.entity';
 import { User } from '../src/users/user.entity';
@@ -28,7 +29,11 @@ import { User } from '../src/users/user.entity';
 interface PublicUser {
   id: string;
   name: string;
+  lastName: string | null;
   email: string;
+  phoneCountryCode: string | null;
+  phone: string | null;
+  birthDate: string | null;
 }
 
 interface TokenResponse {
@@ -70,6 +75,19 @@ describe('Autenticacion (e2e)', () => {
     return 'auth-' + randomUUID() + '@example.invalid';
   }
 
+  function registrationData(email = uniqueEmail()) {
+    return {
+      name: 'Usuario de prueba',
+      lastName: 'Apellido de prueba',
+      email,
+      phoneCountryCode: '+54',
+      phone: '1155551234',
+      birthDate: '2000-05-20',
+      password: TEST_PASSWORD,
+      confirmPassword: TEST_PASSWORD,
+    };
+  }
+
   function googleTicket(sub: string, email: string, verified = true) {
     const now = Math.floor(Date.now() / 1000);
 
@@ -80,6 +98,8 @@ describe('Autenticacion (e2e)', () => {
       email,
       email_verified: verified,
       name: 'Usuario de prueba Google',
+      given_name: 'Usuario',
+      family_name: 'Prueba Google',
       iat: now,
       exp: now + 3600,
     });
@@ -88,11 +108,7 @@ describe('Autenticacion (e2e)', () => {
   async function registerAccount() {
     const response = await request(server())
       .post('/auth/register')
-      .send({
-        name: 'Usuario de prueba',
-        email: uniqueEmail(),
-        password: TEST_PASSWORD,
-      })
+      .send(registrationData())
       .expect(201);
 
     return response.body as PublicUser;
@@ -177,6 +193,187 @@ describe('Autenticacion (e2e)', () => {
       if (app) await app.close();
       if (dataSource?.isInitialized) await dataSource.destroy();
     }
+  });
+
+  it('ofrece los paises y prefijos sin requerir iniciar sesion', async () => {
+    const response = await request(server())
+      .get('/users/phone-countries')
+      .expect(200);
+
+    expect(response.body).toEqual(
+      expect.arrayContaining([
+        {
+          isoCode: 'AR',
+          name: 'Argentina',
+          dialCode: '+54',
+          label: '+54 ARGENTINA',
+        },
+        { isoCode: 'CL', name: 'Chile', dialCode: '+56', label: '+56 CHILE' },
+        {
+          isoCode: 'CO',
+          name: 'Colombia',
+          dialCode: '+57',
+          label: '+57 COLOMBIA',
+        },
+        { isoCode: 'MX', name: 'México', dialCode: '+52', label: '+52 MÉXICO' },
+        { isoCode: 'PE', name: 'Perú', dialCode: '+51', label: '+51 PERÚ' },
+        {
+          isoCode: 'UY',
+          name: 'Uruguay',
+          dialCode: '+598',
+          label: '+598 URUGUAY',
+        },
+      ]),
+    );
+  });
+
+  it.each([
+    { country: 'Argentina', phoneCountryCode: '+54', phone: '1155551234' },
+    { country: 'Chile', phoneCountryCode: '+56', phone: '961234567' },
+    { country: 'Colombia', phoneCountryCode: '+57', phone: '3001234567' },
+    { country: 'México', phoneCountryCode: '+52', phone: '5512345678' },
+    { country: 'Perú', phoneCountryCode: '+51', phone: '912345678' },
+    { country: 'Uruguay', phoneCountryCode: '+598', phone: '99123456' },
+  ])(
+    'registra el codigo y numero por separado para $country',
+    async (country) => {
+      const data = {
+        ...registrationData(),
+        phoneCountryCode: country.phoneCountryCode,
+        phone: country.phone,
+      };
+      const response = await request(server())
+        .post('/auth/register')
+        .send(data)
+        .expect(201);
+      const created = response.body as PublicUser;
+
+      expect(created).toMatchObject({
+        phoneCountryCode: country.phoneCountryCode,
+        phone: country.phone,
+      });
+      expect(
+        await database().getRepository(User).findOneBy({ id: created.id }),
+      ).toMatchObject({
+        phoneCountryCode: country.phoneCountryCode,
+        phone: country.phone,
+      });
+    },
+  );
+
+  it('normaliza el numero nacional sin duplicar el prefijo', async () => {
+    const response = await request(server())
+      .post('/auth/register')
+      .send({ ...registrationData(), phone: '11 5555-1234' })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      phoneCountryCode: '+54',
+      phone: '1155551234',
+    });
+  });
+
+  it('guarda los campos del formulario sin devolver las contrasenas', async () => {
+    const data = registrationData();
+    const response = await request(server())
+      .post('/auth/register')
+      .send(data)
+      .expect(201);
+    const created = response.body as PublicUser;
+
+    expect(created).toEqual({
+      id: expect.any(String),
+      name: data.name,
+      lastName: data.lastName,
+      email: data.email,
+      phoneCountryCode: data.phoneCountryCode,
+      phone: data.phone,
+      birthDate: data.birthDate,
+    });
+
+    const stored = await database()
+      .getRepository(User)
+      .createQueryBuilder('user')
+      .addSelect('user.passwordHash')
+      .where('user.id = :id', { id: created.id })
+      .getOne();
+
+    expect(stored).toMatchObject({
+      lastName: data.lastName,
+      phoneCountryCode: data.phoneCountryCode,
+      phone: data.phone,
+      birthDate: data.birthDate,
+    });
+    expect(
+      await bcrypt.compare(TEST_PASSWORD, stored?.passwordHash ?? ''),
+    ).toBe(true);
+    expect(stored).not.toHaveProperty('confirmPassword');
+  });
+
+  it('rechaza contrasenas diferentes sin crear la cuenta', async () => {
+    const data = registrationData();
+
+    await request(server())
+      .post('/auth/register')
+      .send({ ...data, confirmPassword: 'OtraClaveDePrueba123!' })
+      .expect(400);
+
+    expect(
+      await database().getRepository(User).findOneBy({ email: data.email }),
+    ).toBeNull();
+  });
+
+  it.each([
+    'lastName',
+    'phoneCountryCode',
+    'phone',
+    'birthDate',
+    'confirmPassword',
+  ] as const)('rechaza el registro cuando falta %s', async (field) => {
+    const data = registrationData();
+
+    await request(server())
+      .post('/auth/register')
+      .send({ ...data, [field]: undefined })
+      .expect(400);
+
+    expect(
+      await database().getRepository(User).findOneBy({ email: data.email }),
+    ).toBeNull();
+  });
+
+  it.each([
+    { phone: 'telefono-invalido' },
+    { phoneCountryCode: '+1' },
+    { phoneCountryCode: '54' },
+    { phone: '+541155551234' },
+    { phoneCountryCode: '+56' },
+    { birthDate: '20/05/2000' },
+    { birthDate: '2000-02-30' },
+  ])('rechaza datos de perfil invalidos: %j', async (invalid) => {
+    const data = registrationData();
+
+    await request(server())
+      .post('/auth/register')
+      .send({ ...data, ...invalid })
+      .expect(400);
+
+    expect(
+      await database().getRepository(User).findOneBy({ email: data.email }),
+    ).toBeNull();
+  });
+
+  it('mantiene el rechazo de correos duplicados con el formulario completo', async () => {
+    const user = await registerAccount();
+
+    await request(server())
+      .post('/auth/register')
+      .send(registrationData(user.email))
+      .expect(409);
+
+    expect(
+      await database().getRepository(User).countBy({ email: user.email }),
+    ).toBe(1);
   });
 
   it('emite un JWT y rechaza el mismo token despues del logout', async () => {
@@ -328,8 +525,13 @@ describe('Autenticacion (e2e)', () => {
 
     expect(user).toMatchObject({
       id: payload.sub,
+      name: 'Usuario',
+      lastName: 'Prueba Google',
       googleId: sub,
       passwordHash: null,
+      phoneCountryCode: null,
+      phone: null,
+      birthDate: null,
     });
     expect(verifyGoogle).toHaveBeenCalledWith({
       idToken: 'credencial-de-google',
@@ -350,6 +552,122 @@ describe('Autenticacion (e2e)', () => {
     expect(
       await database().getRepository(User).countBy({ googleId: sub }),
     ).toBe(1);
+  });
+
+  it('permite completar el perfil de Google solamente con una sesion activa', async () => {
+    const sub = randomUUID();
+    const email = uniqueEmail();
+    verifyGoogle.mockResolvedValueOnce(googleTicket(sub, email));
+
+    const loginResponse = await request(server())
+      .post('/auth/google')
+      .send({ idToken: 'credencial-de-google' })
+      .expect(200);
+    const token = (loginResponse.body as TokenResponse).access_token;
+    const payload = await jwtService.verifyAsync<TokenPayload>(token);
+    const profile = {
+      lastName: 'Apellido completado',
+      phoneCountryCode: '+54',
+      phone: '1155551234',
+      birthDate: '2000-05-20',
+    };
+
+    await request(server()).patch('/users/me').send(profile).expect(401);
+
+    const response = await request(server())
+      .patch('/users/me')
+      .set('Authorization', 'Bearer ' + token)
+      .send(profile)
+      .expect(200);
+
+    expect(response.body).toEqual({
+      id: payload.sub,
+      name: 'Usuario',
+      email,
+      ...profile,
+    });
+    expect(
+      await database().getRepository(User).findOneBy({ id: payload.sub }),
+    ).toMatchObject({ ...profile, googleId: sub });
+
+    await request(server())
+      .post('/auth/logout')
+      .set('Authorization', 'Bearer ' + token)
+      .expect(204);
+    await request(server())
+      .patch('/users/me')
+      .set('Authorization', 'Bearer ' + token)
+      .send(profile)
+      .expect(401);
+  });
+
+  it('valida el perfil y rechaza cambios de cuenta no permitidos', async () => {
+    const user = await registerAccount();
+    const token = await login(user.email);
+
+    for (const invalid of [
+      { lastName: '', phone: 'invalido', birthDate: 'fecha-invalida' },
+      {
+        lastName: 'Otro apellido',
+        phoneCountryCode: '+54',
+        phone: '1155551234',
+        birthDate: '2000-05-20',
+        email: uniqueEmail(),
+      },
+      {
+        lastName: 'Otro apellido',
+        phoneCountryCode: '+1',
+        phone: '2025550123',
+        birthDate: '2000-05-20',
+      },
+    ]) {
+      await request(server())
+        .patch('/users/me')
+        .set('Authorization', 'Bearer ' + token)
+        .send(invalid)
+        .expect(400);
+    }
+
+    expect(
+      await database().getRepository(User).findOneBy({ id: user.id }),
+    ).toMatchObject({
+      email: user.email,
+      lastName: user.lastName,
+      phoneCountryCode: user.phoneCountryCode,
+      phone: user.phone,
+      birthDate: user.birthDate,
+    });
+  });
+
+  it('el perfil se actualiza segun el usuario del JWT', async () => {
+    const owner = await registerAccount();
+    const other = await registerAccount();
+    const token = await login(owner.email);
+    const profile = {
+      lastName: 'Solo cambia el propietario',
+      phoneCountryCode: '+54',
+      phone: '1155551234',
+      birthDate: '1999-04-15',
+    };
+
+    const response = await request(server())
+      .patch('/users/me')
+      .set('Authorization', 'Bearer ' + token)
+      .send(profile)
+      .expect(200);
+
+    expect((response.body as PublicUser).id).toBe(owner.id);
+    expect(
+      await database().getRepository(User).findOneBy({ id: owner.id }),
+    ).toMatchObject(profile);
+    expect(
+      await database().getRepository(User).findOneBy({ id: other.id }),
+    ).toMatchObject({
+      lastName: other.lastName,
+      phoneCountryCode: other.phoneCountryCode,
+      phone: other.phone,
+      birthDate: other.birthDate,
+    });
   });
 
   it('no vincula automaticamente Google a un correo registrado con contrasena', async () => {

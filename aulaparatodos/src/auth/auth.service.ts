@@ -31,6 +31,10 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
+    if (dto.password !== dto.confirmPassword) {
+      throw new BadRequestException('Las contraseñas no coinciden');
+    }
+
     if (Buffer.byteLength(dto.password, 'utf8') > 72) {
       throw new BadRequestException(
         'La contraseña no puede superar los 72 bytes',
@@ -47,7 +51,11 @@ export class AuthService {
     try {
       return await this.usersService.create({
         name: dto.name,
+        lastName: dto.lastName,
         email: dto.email,
+        phoneCountryCode: dto.phoneCountryCode,
+        phone: dto.phone,
+        birthDate: dto.birthDate,
         passwordHash,
       });
     } catch (error) {
@@ -125,9 +133,16 @@ export class AuthService {
 
     try {
       const createdUser = await this.usersService.create({
-        name: Array.from(payload.name?.trim() || 'Usuario de Google')
+        name: Array.from(
+          payload.given_name?.trim() ||
+            payload.name?.trim() ||
+            'Usuario de Google',
+        )
           .slice(0, 100)
           .join(''),
+        lastName: payload.family_name?.trim()
+          ? Array.from(payload.family_name.trim()).slice(0, 100).join('')
+          : undefined,
         email: payload.email,
         googleId: payload.sub,
       });

@@ -4,10 +4,15 @@ import {
   IsString,
   MaxLength,
   MinLength,
-  IsPhoneNumber,
   IsDateString,
   Matches,
+  IsIn,
+  Validate,
 } from 'class-validator';
+import {
+  PHONE_COUNTRY_CODES,
+  PhoneForCountryConstraint,
+} from '../../users/phone-countries';
 
 export class RegisterDto {
   @IsString()
@@ -24,7 +29,12 @@ export class RegisterDto {
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   birthDate!: string;
 
-  @IsPhoneNumber()
+  @IsIn(PHONE_COUNTRY_CODES)
+  phoneCountryCode!: string;
+
+  @IsString()
+  @MaxLength(30)
+  @Validate(PhoneForCountryConstraint)
   phone!: string;
 
   @IsEmail()
@@ -56,4 +66,23 @@ export class GoogleLoginDto {
   @IsString()
   @IsNotEmpty()
   idToken!: string;
+}
+
+export class CompleteProfileDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  lastName!: string;
+
+  @IsIn(PHONE_COUNTRY_CODES)
+  phoneCountryCode!: string;
+
+  @IsString()
+  @MaxLength(30)
+  @Validate(PhoneForCountryConstraint)
+  phone!: string;
+
+  @IsDateString({ strict: true })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  birthDate!: string;
 }
